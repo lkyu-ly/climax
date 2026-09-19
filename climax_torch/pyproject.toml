@@ -10,7 +10,6 @@ authors =[
     {name="Jayesh K. Gupta", email="mail@rejuvyesh.com"}
 ]
 description = ""
-readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -25,4 +24,4 @@ dependencies = [
 "Bug Tracker" = "https://github.com/microsoft/ClimaX/issues"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
