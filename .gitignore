@@ -146,3 +146,4 @@ models/
 
 # experiment outputs
 exps/
+.superpowers/
