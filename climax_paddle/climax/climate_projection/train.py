@@ -140,9 +140,25 @@ def main():
     )
 
     net = ClimaXClimateBench(**cfg.model.net.init_args)
+
+    # --model.init_state_path: load the FULL initial state (backbone + heads)
+    # directly, bypassing load_mae_weights (whose cleaning drops token_embeds/
+    # head keys and would leave the heads freshly initialized instead of shared
+    # with the torch baseline). Same load path as tools/compare_forward.py.
+    init_state_path = cfg.model.get("init_state_path", "")
+    if init_state_path:
+        ckpt = paddle.load(init_state_path)["state_dict"]
+        full = {k[len("net."):]: v for k, v in ckpt.items() if k.startswith("net.")}
+        missing, unexpected = net.set_state_dict(full)
+        print(
+            "Loaded full initial state from %s: missing=%s unexpected=%s"
+            % (init_state_path, sorted(missing), sorted(unexpected))
+        )
+        if missing or unexpected:
+            raise RuntimeError("strict initial state load failed")
     module = ClimateProjectionModule(
         net=net,
-        pretrained_path=cfg.model.get("pretrained_path", ""),
+        pretrained_path="" if init_state_path else cfg.model.get("pretrained_path", ""),
         lr=cfg.model.get("lr", 5e-4),
         beta_1=cfg.model.get("beta_1", 0.9),
         beta_2=cfg.model.get("beta_2", 0.99),
