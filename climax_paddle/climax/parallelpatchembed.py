@@ -1,6 +1,7 @@
 import math
 
 import paddle
+from timm_paddle import to_2tuple
 
 
 def _get_conv2d_weights(in_channels, out_channels, kernel_size):
@@ -36,8 +37,8 @@ class ParallelVarPatchEmbed(paddle.nn.Module):
     ):
         super().__init__()
         self.max_vars = max_vars
->>>>>>        self.img_size = timm.layers.helpers.to_2tuple(img_size)
->>>>>>        self.patch_size = timm.layers.helpers.to_2tuple(patch_size)
+        self.img_size = to_2tuple(img_size)
+        self.patch_size = to_2tuple(patch_size)
         self.grid_size = (
             img_size[0] // self.patch_size[0],
             img_size[1] // self.patch_size[1],

@@ -2,6 +2,8 @@ from functools import lru_cache
 
 import numpy as np
 import paddle
+from timm_paddle import Block, PatchEmbed, trunc_normal_
+
 from climax.utils.pos_embed import (get_1d_sincos_pos_embed_from_grid,
                                     get_2d_sincos_pos_embed)
 
@@ -53,7 +55,7 @@ class ClimaX(paddle.nn.Module):
         else:
             self.token_embeds = paddle.nn.ModuleList(
                 [
->>>>>>                    timm.models.vision_transformer.PatchEmbed(
+                    PatchEmbed(
                         img_size, patch_size, 1, embed_dim
                     )
                     for i in range(len(default_vars))
@@ -75,7 +77,7 @@ class ClimaX(paddle.nn.Module):
         dpr = [x.item() for x in paddle.linspace(0, drop_path, depth)]
         self.blocks = paddle.nn.ModuleList(
             [
->>>>>>                timm.models.vision_transformer.Block(
+                Block(
                     embed_dim,
                     num_heads,
                     mlp_ratio,
@@ -113,20 +115,20 @@ class ClimaX(paddle.nn.Module):
         if self.parallel_patch_embed:
             for i in range(len(self.token_embeds.proj_weights)):
                 w = self.token_embeds.proj_weights[i].data
->>>>>>                timm.models.vision_transformer.trunc_normal_(
+                trunc_normal_(
                     w.view([w.shape[0], -1]), std=0.02
                 )
         else:
             for i in range(len(self.token_embeds)):
                 w = self.token_embeds[i].proj.weight.data
->>>>>>                timm.models.vision_transformer.trunc_normal_(
+                trunc_normal_(
                     w.view([w.shape[0], -1]), std=0.02
                 )
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
         if isinstance(m, paddle.compat.nn.Linear):
->>>>>>            timm.models.vision_transformer.trunc_normal_(m.weight, std=0.02)
+            trunc_normal_(m.weight, std=0.02)
             if m.bias is not None:
                 paddle.nn.init.constant_(m.bias, 0)
         elif isinstance(m, paddle.nn.LayerNorm):
