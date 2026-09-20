@@ -6,15 +6,21 @@ from climax.climate_projection.arch import ClimaXClimateBench
 from climax.utils.lr_scheduler import LinearWarmupCosineAnnealingLR
 from climax.utils.metrics import (lat_weighted_mse_val, lat_weighted_nrmse,
                                   lat_weighted_rmse, mse)
+from climax.utils.normalize import Normalize
 from climax.utils.pos_embed import interpolate_pos_embed
 
 
->>>>>>class ClimateProjectionModule(pytorch_lightning.LightningModule):
-    """Lightning module for climate projection with the ClimaXClimateBench model.
+class ClimateProjectionModule:
+    """Plain paddle training module for climate projection with the ClimaXClimateBench model.
+
+    Replaces the torch LightningModule: hyperparameters are stored directly on
+    the instance (instead of ``save_hyperparameters``), logged metrics are
+    appended to ``self.log_history`` (instead of ``self.log``) and consumed by
+    the custom training loop in ``train.py``.
 
     Args:
         net (ClimaXClimateBench): ClimaXClimateBench model.
-        pretrained_path (str, optional): Path to pre-trained checkpoint.
+        pretrained_path (str, optional): Path to pre-trained checkpoint (pdparams).
         lr (float, optional): Learning rate.
         beta_1 (float, optional): Beta 1 for AdamW.
         beta_2 (float, optional): Beta 2 for AdamW.
@@ -38,23 +44,50 @@ from climax.utils.pos_embed import interpolate_pos_embed
         warmup_start_lr: float = 1e-08,
         eta_min: float = 1e-08,
     ):
-        super().__init__()
-        self.save_hyperparameters(logger=False, ignore=["net"])
         self.net = net
+        # replaces save_hyperparameters(logger=False, ignore=["net"])
+        self.pretrained_path = pretrained_path
+        self.lr = lr
+        self.beta_1 = beta_1
+        self.beta_2 = beta_2
+        self.weight_decay = weight_decay
+        self.warmup_epochs = warmup_epochs
+        self.max_epochs = max_epochs
+        self.warmup_start_lr = warmup_start_lr
+        self.eta_min = eta_min
+        # replaces LightningModule.log(): one list of floats per metric name
+        self.log_history = {}
+        # freeze_encoder (semantics of torch arch.py:69-76): all transformer
+        # block params except norms are frozen via stop_gradient. Applied here
+        # (after net construction) so it holds regardless of how the net was
+        # built; idempotent with the net's own freezing.
+        if getattr(net, "freeze_encoder", False):
+            for name, p in net.blocks.named_parameters():
+                name = name.lower()
+                # we do not freeze the norm layers, as suggested by https://arxiv.org/abs/2103.05247
+                if "norm" in name:
+                    continue
+                else:
+                    p.stop_gradient = True
         if len(pretrained_path) > 0:
             self.load_mae_weights(pretrained_path)
 
     def load_mae_weights(self, pretrained_path):
-        if pretrained_path.startswith("http"):
-            checkpoint = paddle.hub.load_state_dict_from_url(
-                url=pretrained_path, map_location=paddle.device("cpu")
-            )
-        else:
-            checkpoint = paddle.load(path=str(pretrained_path))
+        # pdparams checkpoint converted from the torch .ckpt (Task 7 contract):
+        # {"state_dict": {keys carrying the "net." prefix}}
+        checkpoint = paddle.load(path=str(pretrained_path))
+
         print("Loading pre-trained checkpoint from: %s" % pretrained_path)
         checkpoint_model = checkpoint["state_dict"]
+        # interpolate positional embedding (expects "net."-prefixed keys)
         interpolate_pos_embed(self.net, checkpoint_model, new_size=self.net.img_size)
-        state_dict = self.state_dict()
+        # strip the lightning "net." prefix -> ClimaXClimateBench-level keys
+        checkpoint_model = {
+            k[len("net."):]: v
+            for k, v in checkpoint_model.items()
+            if k.startswith("net.")
+        }
+        state_dict = self.net.state_dict()
         if self.net.parallel_patch_embed:
             if "token_embeds.proj_weights" not in checkpoint_model.keys():
                 raise ValueError(
@@ -64,7 +97,7 @@ from climax.utils.pos_embed import interpolate_pos_embed
             if "channel" in k:
                 checkpoint_model[k.replace("channel", "var")] = checkpoint_model[k]
                 del checkpoint_model[k]
-            if "token_embeds" in k or "head" in k:
+            if "token_embeds" in k or "head" in k:  # initialize embedding from scratch
                 print(f"Removing key {k} from pretrained checkpoint")
                 del checkpoint_model[k]
                 continue
@@ -75,11 +108,15 @@ from climax.utils.pos_embed import interpolate_pos_embed
             ):
                 print(f"Removing key {k} from pretrained checkpoint")
                 del checkpoint_model[k]
-        msg = self.load_state_dict(checkpoint_model, strict=False)
+
+        # load pre-trained model (paddle set_state_dict is lenient by default,
+        # equivalent to torch's strict=False; returns
+        # (missing_keys, unexpected_keys))
+        msg = self.net.set_state_dict(checkpoint_model)
         print(msg)
 
     def set_denormalization(self, mean, std):
->>>>>>        self.denormalization = torchvision.transforms.transforms.Normalize(mean, std)
+        self.denormalization = Normalize(mean, std)
 
     def set_lat_lon(self, lat, lon):
         self.lat = lat
@@ -96,23 +133,22 @@ from climax.utils.pos_embed import interpolate_pos_embed
 
     def training_step(self, batch: Any, batch_idx: int):
         x, y, lead_times, variables, out_variables = batch
+
         loss_dict, _ = self.net.forward(
             x, y, lead_times, variables, out_variables, [mse], lat=self.lat
         )
         loss_dict = loss_dict[0]
         for var in loss_dict.keys():
-            self.log(
-                "train/" + var,
-                loss_dict[var],
-                on_step=True,
-                on_epoch=False,
-                prog_bar=True,
+            self.log_history.setdefault("train/" + var, []).append(
+                float(loss_dict[var])
             )
         loss = loss_dict["loss"]
+
         return loss
 
     def validation_step(self, batch: Any, batch_idx: int):
         x, y, lead_times, variables, out_variables = batch
+
         all_loss_dicts = self.net.evaluate(
             x,
             y,
@@ -125,23 +161,21 @@ from climax.utils.pos_embed import interpolate_pos_embed
             clim=self.val_clim,
             log_postfix=None,
         )
+
         loss_dict = {}
         for d in all_loss_dicts:
             for k in d.keys():
                 loss_dict[k] = d[k]
+
         for var in loss_dict.keys():
-            self.log(
-                "val/" + var,
-                loss_dict[var],
-                on_step=False,
-                on_epoch=True,
-                prog_bar=False,
-                sync_dist=True,
+            self.log_history.setdefault("val/" + var, []).append(
+                float(loss_dict[var])
             )
         return loss_dict
 
     def test_step(self, batch: Any, batch_idx: int):
         x, y, lead_times, variables, out_variables = batch
+
         all_loss_dicts = self.net.evaluate(
             x,
             y,
@@ -154,52 +188,42 @@ from climax.utils.pos_embed import interpolate_pos_embed
             clim=self.test_clim,
             log_postfix=None,
         )
+
         loss_dict = {}
         for d in all_loss_dicts:
             for k in d.keys():
                 loss_dict[k] = d[k]
+
         for var in loss_dict.keys():
-            self.log(
-                "test/" + var,
-                loss_dict[var],
-                on_step=False,
-                on_epoch=True,
-                prog_bar=False,
-                sync_dist=True,
+            self.log_history.setdefault("test/" + var, []).append(
+                float(loss_dict[var])
             )
         return loss_dict
 
     def configure_optimizers(self):
-        decay = []
-        no_decay = []
-        for name, m in self.named_parameters():
+        decay, no_decay = [], []
+        for name, p in self.net.named_parameters():
+            if p.stop_gradient:
+                continue  # frozen params (freeze_encoder) are excluded
             if "var_embed" in name or "pos_embed" in name or "time_pos_embed" in name:
-                no_decay.append(m)
+                no_decay.append(p)
             else:
-                decay.append(m)
-        optimizer = paddle.optimizer.AdamW(
+                decay.append(p)
+        opt = paddle.optimizer.AdamW(
+            learning_rate=self.lr,
+            beta1=self.beta_1,
+            beta2=self.beta_2,
+            epsilon=1e-8,
             parameters=[
-                {
-                    "params": decay,
-                    "lr": self.hparams.lr,
-                    "betas": (self.hparams.beta_1, self.hparams.beta_2),
-                    "weight_decay": self.hparams.weight_decay,
-                },
-                {
-                    "params": no_decay,
-                    "lr": self.hparams.lr,
-                    "betas": (self.hparams.beta_1, self.hparams.beta_2),
-                    "weight_decay": 0,
-                },
+                {"params": decay, "weight_decay": self.weight_decay},
+                {"params": no_decay, "weight_decay": 0.0},
             ],
-            weight_decay=0.0,
         )
-        lr_scheduler = LinearWarmupCosineAnnealingLR(
-            optimizer,
-            self.hparams.warmup_epochs,
-            self.hparams.max_epochs,
-            self.hparams.warmup_start_lr,
-            self.hparams.eta_min,
+        sched = LinearWarmupCosineAnnealingLR(
+            opt,
+            self.warmup_epochs,
+            self.max_epochs,
+            self.warmup_start_lr,
+            self.eta_min,
         )
-        scheduler = {"scheduler": lr_scheduler, "interval": "step", "frequency": 1}
-        return {"optimizer": optimizer, "lr_scheduler": scheduler}
+        return opt, sched
