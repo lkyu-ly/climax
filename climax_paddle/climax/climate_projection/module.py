@@ -1,6 +1,5 @@
-from typing import Any, Dict
+from typing import Any
 
-import numpy as np
 import paddle
 from climax.climate_projection.arch import ClimaXClimateBench
 from climax.utils.lr_scheduler import LinearWarmupCosineAnnealingLR
@@ -88,6 +87,10 @@ class ClimateProjectionModule:
             if k.startswith("net.")
         }
         state_dict = self.net.state_dict()
+        # NOTE intentional fix: the prefix has already been stripped above, so
+        # the unprefixed key check is correct here; the torch original checks
+        # the unprefixed key against the still-"net."-prefixed dict, which can
+        # never match (latent bug, unreachable with parallel_patch_embed=True).
         if self.net.parallel_patch_embed:
             if "token_embeds.proj_weights" not in checkpoint_model.keys():
                 raise ValueError(

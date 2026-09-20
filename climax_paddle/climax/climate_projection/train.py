@@ -81,20 +81,25 @@ def _epoch_means(module, prefix, start_lengths):
 
 
 def _print_metric_table(metrics, header="Test metric", source="DataLoader 0"):
-    """Print a lightning-style two-column metric table (torch baseline format)."""
-    name_w, value_w = 28, 26
-    print("┏━━━┳" + "━" * name_w + "┳" + "━" * value_w + "┓")
-    print("┃   ┃" + header.center(name_w) + "┃" + source.center(value_w) + "┃")
-    print("┡━━━╇" + "━" * name_w + "╇" + "━" * value_w + "┥")
+    """Print a lightning-style two-column metric table (torch baseline format).
+
+    Matches the torch baseline table (exps/torch_baseline_train.log): two
+    columns of equal width, no leading empty column, cells centered with
+    format-spec ``^`` (odd padding puts the extra space on the right, like
+    lightning). Width is floored at 27 so the current metric key set renders
+    exactly at the baseline's 27/27; longer keys/values widen the columns.
+    """
+    longest = max(
+        [len(header), len(source)] + [len(k) for k in metrics] +
+        [len(str(v)) for v in metrics.values()]
+    )
+    width = max(27, longest + 2)
+    print("┏" + "━" * width + "┳" + "━" * width + "┓")
+    print(f"┃{header:^{width}}┃{source:^{width}}┃")
+    print("┡" + "━" * width + "╇" + "━" * width + "┩")
     for name in sorted(metrics.keys()):
-        print(
-            "│   │"
-            + name.center(name_w)
-            + "│"
-            + str(metrics[name]).center(value_w)
-            + "│"
-        )
-    print("└───┴" + "─" * name_w + "┴" + "─" * value_w + "┘")
+        print(f"│{name:^{width}}│{metrics[name]:^{width}}│")
+    print("└" + "─" * width + "┴" + "─" * width + "┘")
 
 
 def main():
