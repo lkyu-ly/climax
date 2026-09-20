@@ -193,7 +193,8 @@ class ClimaX(paddle.nn.Module):
         else:
             for i in range(len(var_ids)):
                 id = var_ids[i]
-                embeds.append(self.token_embeds[id](x[:, i : i + 1]))
+                # paddle LayerList indexing needs a Python int (var_ids[i] is a 0-dim tensor)
+                embeds.append(self.token_embeds[int(id)](x[:, i : i + 1]))
             x = paddle.stack(embeds, dim=1)
         var_embed = self.get_var_emb(self.var_embed, variables)
         x = x + var_embed.unsqueeze(2)
