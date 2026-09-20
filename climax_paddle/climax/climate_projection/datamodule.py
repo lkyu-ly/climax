@@ -12,13 +12,13 @@ from climax.climate_projection.dataset import (ClimateBenchDataset,
 def collate_fn(batch):
     inp = paddle.stack([batch[i][0] for i in range(len(batch))])
     out = paddle.stack([batch[i][1] for i in range(len(batch))])
-    lead_times = paddle.cat([batch[i][2] for i in range(len(batch))])
+    lead_times = paddle.concat([batch[i][2] for i in range(len(batch))])
     variables = batch[0][3]
     out_variables = batch[0][4]
     return inp, out, lead_times, variables, out_variables
 
 
->>>>>>class ClimateBenchDataModule(pytorch_lightning.LightningDataModule):
+class ClimateBenchDataModule:
     def __init__(
         self,
         root_dir,
@@ -39,11 +39,18 @@ def collate_fn(batch):
         num_workers: int = 1,
         pin_memory: bool = False,
     ):
-        super().__init__()
-        self.save_hyperparameters(logger=False)
+        self.root_dir = root_dir
+        self.history = history
+        self.list_train_simu = list_train_simu
+        self.list_test_simu = list_test_simu
+        self.variables = variables
+        self.train_ratio = train_ratio
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.pin_memory = pin_memory  # kept for API parity; paddle DataLoader has no pin_memory
         if isinstance(out_variables, str):
             out_variables = [out_variables]
-            self.hparams.out_variables = out_variables
+        self.out_variables = out_variables
         dict_x_train_val, dict_y_train_val, lat, lon = load_x_y(
             os.path.join(root_dir, "train_val"), list_train_simu, out_variables
         )
@@ -118,26 +125,26 @@ def collate_fn(batch):
     def train_dataloader(self):
         return paddle.io.DataLoader(
             dataset=self.dataset_train,
-            batch_size=self.hparams.batch_size,
+            batch_size=self.batch_size,
             shuffle=True,
-            num_workers=self.hparams.num_workers,
+            num_workers=self.num_workers,
             collate_fn=collate_fn,
         )
 
     def val_dataloader(self):
         return paddle.io.DataLoader(
             dataset=self.dataset_val,
-            batch_size=self.hparams.batch_size,
+            batch_size=self.batch_size,
             shuffle=False,
-            num_workers=self.hparams.num_workers,
+            num_workers=self.num_workers,
             collate_fn=collate_fn,
         )
 
     def test_dataloader(self):
         return paddle.io.DataLoader(
             dataset=self.dataset_test,
-            batch_size=self.hparams.batch_size,
+            batch_size=self.batch_size,
             shuffle=False,
-            num_workers=self.hparams.num_workers,
+            num_workers=self.num_workers,
             collate_fn=collate_fn,
         )

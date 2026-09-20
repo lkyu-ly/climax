@@ -4,6 +4,8 @@ import numpy as np
 import paddle
 import xarray as xr
 
+from climax.utils.normalize import Normalize
+
 
 def load_x_y(data_path, list_simu, out_var):
     x_all, y_all = {}, {}
@@ -15,15 +17,11 @@ def load_x_y(data_path, list_simu, out_var):
             output_xr = xr.open_dataset(os.path.join(data_path, output_name)).mean(
                 dim="member"
             )
-            """Not Support auto convert *.rename, please judge whether it is Pytorch API and convert by yourself"""
->>>>>>            output_xr = (
-                output_xr.assign(
-                    {"pr": output_xr.pr * 86400, "pr90": output_xr.pr90 * 86400}
-                )
-                .rename({"lon": "longitude", "lat": "latitude"})
-                .transpose("time", "latitude", "longitude")
-                .drop(["quantile"])
-            )
+            output_xr = output_xr.assign(
+                {"pr": output_xr.pr * 86400, "pr90": output_xr.pr90 * 86400}
+            ).rename({"lon": "longitude", "lat": "latitude"}).transpose(
+                "time", "latitude", "longitude"
+            ).drop(["quantile"])
         else:
             input_xr = xr.open_mfdataset(
                 [
@@ -42,15 +40,11 @@ def load_x_y(data_path, list_simu, out_var):
                 ],
                 dim="time",
             ).compute()
-            """Not Support auto convert *.rename, please judge whether it is Pytorch API and convert by yourself"""
->>>>>>            output_xr = (
-                output_xr.assign(
-                    {"pr": output_xr.pr * 86400, "pr90": output_xr.pr90 * 86400}
-                )
-                .rename({"lon": "longitude", "lat": "latitude"})
-                .transpose("time", "latitude", "longitude")
-                .drop(["quantile"])
-            )
+            output_xr = output_xr.assign(
+                {"pr": output_xr.pr * 86400, "pr90": output_xr.pr90 * 86400}
+            ).rename({"lon": "longitude", "lat": "latitude"}).transpose(
+                "time", "latitude", "longitude"
+            ).drop(["quantile"])
         print(input_xr.dims, output_xr.dims, simu)
         x = input_xr.to_array().to_numpy()
         x = x.transpose(1, 0, 2, 3).astype(np.float32)
@@ -110,7 +104,7 @@ def split_train_val(x, y, train_ratio=0.9):
     return x[train_ids], y[train_ids], x[val_ids], y[val_ids]
 
 
-class ClimateBenchDataset(paddle.utils.data.Dataset):
+class ClimateBenchDataset(paddle.io.Dataset):
     def __init__(
         self, X_train_all, Y_train_all, variables, out_variables, lat, partition="train"
     ):
@@ -124,9 +118,7 @@ class ClimateBenchDataset(paddle.utils.data.Dataset):
         self.partition = partition
         if partition == "train":
             self.inp_transform = self.get_normalize(self.X_train_all)
->>>>>>            self.out_transform = torchvision.transforms.transforms.Normalize(
-                np.array([0.0]), np.array([1.0])
-            )
+            self.out_transform = Normalize(np.array([0.0]), np.array([1.0]))
         else:
             self.inp_transform = None
             self.out_transform = None
@@ -138,21 +130,17 @@ class ClimateBenchDataset(paddle.utils.data.Dataset):
     def get_normalize(self, data):
         mean = np.mean(data, axis=(0, 1, 3, 4))
         std = np.std(data, axis=(0, 1, 3, 4))
->>>>>>        return torchvision.transforms.transforms.Normalize(mean, std)
+        return Normalize(mean, std)
 
     def set_normalize(self, inp_normalize, out_normalize):
         self.inp_transform = inp_normalize
         self.out_transform = out_normalize
 
     def get_rmse_normalization(self):
-        y_avg = paddle.from_numpy(self.Y_train_all).squeeze(1).mean(0)
-        w_lat = np.cos(np.deg2rad(self.lat))
+        y_avg = paddle.to_tensor(self.Y_train_all).squeeze(1).mean(0)  # H, W
+        w_lat = np.cos(np.deg2rad(self.lat))  # (H,)
         w_lat = w_lat / w_lat.mean()
-        w_lat = (
-            paddle.from_numpy(w_lat)
-            .unsqueeze(-1)
-            .to(dtype=y_avg.dtype, device=y_avg.device)
-        )
+        w_lat = paddle.to_tensor(w_lat).unsqueeze(-1).astype(y_avg.dtype)  # (H, 1)
         self.y_normalization = paddle.abs(paddle.mean(y_avg * w_lat))
 
     def __len__(self):
