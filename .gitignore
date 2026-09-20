@@ -139,3 +139,10 @@ exps
 
 # spec-workflow tool data
 .spec-workflow/
+
+# datasets & model weights (too large for git)
+dataset/
+models/
+
+# experiment outputs
+exps/

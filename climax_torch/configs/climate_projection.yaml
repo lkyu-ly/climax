@@ -59,8 +59,6 @@ trainer:
       init_args:
         max_depth: -1
 
-    - class_path: pytorch_lightning.callbacks.RichProgressBar
-
 # ---------------------------- MODEL -------------------------------------------
 model:
   lr: 5e-4
