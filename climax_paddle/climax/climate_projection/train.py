@@ -5,6 +5,8 @@ import argparse
 import ast
 import os
 import random
+import statistics
+import time
 
 # CINN switch: a single env var gates both to_static and the CINN FLAGS
 # (paddle 3.x binds them: to_static always compiles with CINN once wrapped,
@@ -220,16 +222,42 @@ def main():
 
     for epoch in range(max_epochs):
         module.net.train()
+        # Per-step timing, identical instrumentation in dynamic and CINN
+        # modes: perf_counter wraps training_step + backward + optimizer
+        # step/clear_grad + lr_scheduler.step (batch fetching excluded).
+        # training_step itself syncs (float() on the logged losses), so the
+        # measured wall time includes actual device execution.
+        step_times = []
+        epoch_train_start = time.perf_counter()
         for i, batch in enumerate(_iter_limited(train_loader, limit_batches)):
+            step_start = time.perf_counter()
             loss = module.training_step(batch, i)
             loss.backward()
             optimizer.step()
             optimizer.clear_grad()
             lr_scheduler.step()
+            step_times.append(time.perf_counter() - step_start)
             if (i + 1) % 50 == 0:
+                cum = sum(step_times)
+                print(
+                    f"[timing] epoch={epoch} step={i + 1} "
+                    f"cum={cum:.2f}s avg={cum / len(step_times):.4f}s"
+                )
                 print(
                     f"Epoch {epoch} step {i + 1}: train/loss = {float(loss):.4f}"
                 )
+        # pure-training wall clock for this epoch (data loading gaps included
+        # only where they overlap compute; validation excluded entirely)
+        train_wall = time.perf_counter() - epoch_train_start
+        steady = step_times[50:]  # skip warmup steps for the steady median
+        steady_median = (
+            f"{statistics.median(steady):.4f}s" if steady else "n/a"
+        )
+        print(
+            f"[timing] epoch={epoch} train_wall={train_wall:.2f}s "
+            f"steps={len(step_times)} steady_median={steady_median} "
+            f"(excl. first 50 steps)"
+        )
 
         # validation: epoch means of the metrics logged by validation_step
         module.net.eval()
