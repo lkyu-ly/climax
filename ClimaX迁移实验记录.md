@@ -186,3 +186,40 @@ test/w_nrmseg    0.03258     0.03498     +7.3%
 总耗时 23m13s vs torch 22m35s（+2.8%，预期 30-50% 减速未出现）。epoch 级 train/loss 点值偏差 ±20~45%（初始权重同源但 shuffle 顺序与 dropout 随机流不同，属预期，简报已预判）；50 步采样 epoch 均值两侧同落 0.2~0.4 量级带、末 epoch 几乎相同（0.288 vs 0.2872）。
 
 判定：**对齐通过**——最终 test 五项相对偏差全部 <10%（最大 7.3%），曲线量级与收敛趋势一致，无需受控对齐。产物 exps/paddle_baseline/{best,last}.pdparams（各 447MB）。
+
+## 2026-09-21
+
+### 结构调整
+
+- timm_paddle → climax_paddle/thirdparty/timm（git rename，import 与注释同步）；timm 抽取的 torch 源删除（可由 timm 1.0.24 官方源 + 计划文档抽取表重建，git 历史留档）；paconvert 日志清理
+- paddle 侧零 torch 依赖双重验证：静态 grep 无任何 torch/torchvision/lightning/timm import；运行时 meta_path 阻断 torch 全家后完整 import 链 + 模型构造（参数量 111,831,040）通过；改名后单批 dryrun 初始 test/w_rmse 与 torch 逐位一致（2.1354）
+
+### CINN 对齐（第三次测试：CINN 前向/训练 + 加速比，计划 docs/superpowers/plans/2026-09-21-climax-cinn.md）
+
+接入方式（踩坑手册坑四模式，commit fd337c4）：`CLIMAX_USE_CINN` 单开关（默认 0，保护基线）——开 = FLAGS 三件套 true（import paddle 前设置）+ `paddle.jit.to_static(net, full_graph=True)`（权重加载后包裹）；`CLIMAX_FULL_GRAPH` 备降级未动用（full_graph=True 一次通过）。paddle 3.4 实测：to_static 的 full_graph 移至 kwargs、backend 默认即 CINN。手册九坑预检：六坑免疫（trace 路径无兼容层方法、forward 显式参数、tuple 返回、无 einops、无复数、数据无生成线程）；五个待实测点（einsum/repeat_interleave/无参 squeeze/lru_cache/compat MHA 训练态）全部未阻塞；唯一实际修复 = forward_encoder 的 ModuleList 0-dim Tensor 索引改 Python 侧 var_map 查找（数值严格等价，与此前 int(id) 修复同族）。
+
+前向（commit 1899dc2，compare_forward 增加 CINN GPU 分支与 robust rel 门禁）——三组对照（torch 恒 CPU）：
+
+```
+paddle 侧          mean_abs    mean_rel(raw)  mean_rel(robust*)
+CPU 动态(基线复现)  2.087e-08   3.012e-06      1.360e-06
+GPU 动态           2.194e-08   1.261e-05      1.368e-06
+GPU CINN           2.237e-08   1.093e-05      1.442e-06   <- 验收 PASS(<1e-5)
+```
+
+eval 前向确证真实走 CINN（日志 `add_cinn_pass.cc:334 Compiling subgraph with CINN backend`，eval 图编译约 34s，CINN 输出三次运行 md5 一致）。mean_rel 跨 GPU 升高归因近零点 ulp 噪声（|torch|<1e-3 的 23/2048 点贡献 ~89% rel 质量，分桶 mean_abs 均匀 ~2e-08）——据此验收门禁增补 robust rel（分母 |torch|≥1e-3；mean_abs 主门禁不变）。
+
+训练（commit 61f9d41，train.py 增 per-step 计时，两侧同口径）——CINN 5 epoch 全量（同源初始权重、seed 42、FP32、batch_size=1）：最终 test 五项 vs torch 基线最大偏差 5.06%（w_mse 0.13416 vs 0.13900、w_rmse 0.36218 vs 0.36871）、vs paddle 动态基线最大 2.14%，均 <10% 通过；val/w_mse 轨迹同形（两侧同 epoch-2 尖峰、同 epoch-4 最优 0.2047/0.2010），epoch-2 尖峰幅度放大（0.4094 vs 0.3058）归因 batch_size=1 下融合改变浮点求和顺序的轨迹分叉（两次独立动态图运行 epoch-1 偏差仅 0.18%、epoch-0 完全可复现，佐证分叉源于 CINN 数值路径而非随机性）。
+
+加速比（确定性数据）：
+
+```
+主指标（第 2 epoch 纯训练段墙钟，剔除首次编译与 GPU 预热）：
+  动态图 267.69s -> CINN 253.78s = +5.20%
+辅指标：稳态步中位数 +2.77%；50 步块均值中位数 +3.65%（CINN 4 个稳态 epoch 方差 <1%）
+首次编译 90.1s 全程仅 1 次（训练图）；epoch0 因编译反慢 83.6s
+5 epoch 规模累计仍略亏，约第 7 epoch 起净收益（短跑看稳态吞吐、长训练才净赚）
+```
+
+结论：CINN 全流程（开关/前向/训练）对齐通过，加速 +5.2%（历史 to_static 模式区间 6.3%~28.1% 的下沿，如实报告）。产物：exps/{cinn_smoke,speed_dynamic,cinn_baseline}*、models 侧无新增。
+
