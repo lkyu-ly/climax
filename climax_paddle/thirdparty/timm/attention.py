@@ -1,18 +1,13 @@
-""" Attention
+"""Attention
 
-Extracted from timm 1.0.24 layers/attention.py (lines 12-111) for the
-thirdparty.timm minimal closure; `@torch.fx.wrap`, `register_notrace_function`
-and `apply_rot_embed_cat` dropped. fused_attn defaults to the manual
-branch (the numerical alignment baseline); the fused branch is kept
-behind the `fused_attn` flag.
+Hacked together by / Copyright 2020 Ross Wightman
+# Adapted from https://github.com/huggingface/pytorch-image-models (timm 1.0.24).
 
-Manual post-paconvert rewrites: paddle.compat.nn.Linear -> paddle.nn.Linear
-(torch-style [out, in] compat layout exchanged for the native [in, out]
-layout so torch Linear weights must be transposed when transferred),
-compat scaled_dot_product_attention -> the native paddle one.
-NOTE: on this environment paddle's scaled_dot_product_attention diverges
-from the manual reference by O(1), so the manual branch stays the default.
+Linear is native paddle.nn.Linear ([in, out] weight layout; torch Linear
+weights must be transposed when transferred). Attention is computed with
+the manual q*scale @ k^T -> softmax -> @ v branch.
 """
+
 from typing import Optional, Type
 
 import paddle
@@ -74,7 +69,6 @@ class Attention(paddle.nn.Module):
         self.head_dim = head_dim
         self.attn_dim = num_heads * head_dim
         self.scale = head_dim**-0.5
-        self.fused_attn = False
         self.qkv = paddle.nn.Linear(
             dim, self.attn_dim * 3, bias_attr=None if qkv_bias else False
         )
@@ -96,22 +90,12 @@ class Attention(paddle.nn.Module):
         )
         q, k, v = qkv.unbind(0)
         q, k = self.q_norm(q), self.k_norm(k)
-        if self.fused_attn:
-            x = paddle.nn.functional.scaled_dot_product_attention(
-                q,
-                k,
-                v,
-                attn_mask=attn_mask,
-                dropout_p=self.attn_drop.p if self.training else 0.0,
-                training=self.training,
-            )
-        else:
-            q = q * self.scale
-            attn = q @ k.transpose(-2, -1)
-            attn = maybe_add_mask(attn, attn_mask)
-            attn = paddle.nn.functional.softmax(attn, axis=-1)
-            attn = self.attn_drop(attn)
-            x = attn @ v
+        q = q * self.scale
+        attn = q @ k.transpose(-2, -1)
+        attn = maybe_add_mask(attn, attn_mask)
+        attn = paddle.nn.functional.softmax(attn, axis=-1)
+        attn = self.attn_drop(attn)
+        x = attn @ v
         x = x.transpose(1, 2).reshape(B, N, self.attn_dim)
         x = self.norm(x)
         x = self.proj(x)

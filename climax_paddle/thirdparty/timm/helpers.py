@@ -1,10 +1,9 @@
-""" Layer/Module Helpers
+"""Layer/Module Helpers
 
 Hacked together by / Copyright 2020 Ross Wightman
-
-Extracted from timm 1.0.24 layers/helpers.py (lines 10-33) for the
-thirdparty.timm minimal closure. Pure standard library.
+# Adapted from https://github.com/huggingface/pytorch-image-models (timm 1.0.24).
 """
+
 import collections.abc
 from itertools import repeat
 

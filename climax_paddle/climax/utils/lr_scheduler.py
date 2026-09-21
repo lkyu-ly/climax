@@ -36,14 +36,8 @@ class LinearWarmupCosineAnnealingLR:
         self.max_epochs = max_epochs
         self.warmup_start_lr = warmup_start_lr
         self.eta_min = eta_min
-        # Paddle keeps dict-style parameter groups in `_param_groups`; when the
-        # optimizer was created from a plain parameter list, `_param_groups` is
-        # that list of tensors -- wrap it in a single implicit group so the
-        # torch-style group-dict bookkeeping below always has dicts to work on.
-        if optimizer._param_groups and isinstance(optimizer._param_groups[0], dict):
-            self.param_groups = optimizer._param_groups
-        else:
-            self.param_groups = [{"params": list(optimizer._param_groups)}]
+        # Paddle keeps dict-style parameter groups in `_param_groups`.
+        self.param_groups = optimizer._param_groups
         self.base_lrs = [
             g.get("learning_rate", optimizer._learning_rate) for g in self.param_groups
         ]

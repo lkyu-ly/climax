@@ -1,12 +1,9 @@
-""" DropPath (Stochastic Depth)
+"""DropPath (Stochastic Depth)
 
-Extracted from timm 1.0.24 layers/drop.py (lines 158-190) for the
-thirdparty.timm minimal closure.
-
-Manual post-paconvert rewrite: `x.new_empty(shape).bernoulli_(keep_prob)`
-is replaced by `paddle.bernoulli(paddle.full(shape, keep_prob, ...))`
-and the in-place `div_` by a functional division.
+Hacked together by / Copyright 2020 Ross Wightman
+# Adapted from https://github.com/huggingface/pytorch-image-models (timm 1.0.24).
 """
+
 import paddle
 
 

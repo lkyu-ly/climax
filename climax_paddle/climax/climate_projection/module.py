@@ -72,7 +72,7 @@ class ClimateProjectionModule:
             self.load_mae_weights(pretrained_path)
 
     def load_mae_weights(self, pretrained_path):
-        # pdparams checkpoint converted from the torch .ckpt (Task 7 contract):
+        # pdparams checkpoint converted from the torch .ckpt:
         # {"state_dict": {keys carrying the "net." prefix}}
         checkpoint = paddle.load(path=str(pretrained_path))
 
@@ -87,10 +87,6 @@ class ClimateProjectionModule:
             if k.startswith("net.")
         }
         state_dict = self.net.state_dict()
-        # NOTE intentional fix: the prefix has already been stripped above, so
-        # the unprefixed key check is correct here; the torch original checks
-        # the unprefixed key against the still-"net."-prefixed dict, which can
-        # never match (latent bug, unreachable with parallel_patch_embed=True).
         if self.net.parallel_patch_embed:
             if "token_embeds.proj_weights" not in checkpoint_model.keys():
                 raise ValueError(

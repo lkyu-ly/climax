@@ -1,9 +1,9 @@
 """Forward alignment verification between the torch and paddle ClimaX ports.
 
-Task 8 acceptance gate. Runs both frameworks on one fixed random input under
+Forward-alignment acceptance gate. Runs both frameworks on one fixed random input under
 identical initial weights and compares the predicted ``tas`` field.
 
-Contract (see task brief):
+Contract:
   * fixed input: ``np.random.RandomState(42)`` -> x=(1,10,4,32,64),
     y=(1,1,32,64), stored float64 in ``exps/task8_forward_align/inputs.npz``
     (both sides cast to float32 after loading); lat read from the real
@@ -223,7 +223,7 @@ def trace_paddle(net, x, lead_times, variables):
 
 
 def cmd_paddle(args):
-    # CINN switch (same contract as train.py): must run before `import paddle`.
+    # CINN switch, mirroring train.py: must run before `import paddle`.
     if os.environ.get("CLIMAX_USE_CINN", "0") == "1":
         os.environ["FLAGS_prim_enable_dynamic"] = "true"
         os.environ["FLAGS_prim_all"] = "true"
@@ -237,9 +237,8 @@ def cmd_paddle(args):
     import paddle
     from climax.climate_projection.arch import ClimaXClimateBench
 
-    # CPU only in the legacy (dynamic-graph) mode. CINN is a GPU compilation
-    # path; with CLIMAX_USE_CINN=1 keep paddle's default device (gpu:0) --
-    # FLAGS_use_cinn behavior under set_device("cpu") is undefined.
+    # CPU in the dynamic-graph mode; CINN requires the GPU, so in CINN mode
+    # keep paddle's default device (gpu:0).
     if os.environ.get("CLIMAX_USE_CINN", "0") != "1":
         paddle.set_device("cpu")
     init_args = load_init_args()
@@ -253,12 +252,11 @@ def cmd_paddle(args):
     print("[paddle] net.set_state_dict: missing=%s unexpected=%s"
           % (sorted(missing), sorted(unexpected)))
     assert not missing and not unexpected, "strict load failed on paddle side"
-    # CINN path (same contract as train.py): wrap after the strict weight
+    # CINN path, mirroring train.py: wrap after the strict weight
     # load, before any forward.
     if os.environ.get("CLIMAX_USE_CINN", "0") == "1":
-        full_graph = os.environ.get("CLIMAX_FULL_GRAPH", "1") == "1"
-        net = paddle.jit.to_static(net, full_graph=full_graph)
-        print("[CINN] to_static enabled, full_graph=%s" % full_graph)
+        net = paddle.jit.to_static(net, full_graph=True)
+        print("[CINN] to_static enabled, full_graph=True")
     net.eval()
 
     d = np.load(INPUTS_NPZ)

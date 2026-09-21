@@ -1,4 +1,4 @@
-""" Image to Patch Embedding using Conv2d
+""" Image to Patch Embedding using Conv2D
 
 A convolution based approach to patchifying a 2D image w/ embedding projection.
 
@@ -7,16 +7,9 @@ Based on code in:
   * https://github.com/google-research/big_vision/tree/main/big_vision
 
 Hacked together by / Copyright 2020 Ross Wightman
-
-Extracted from timm 1.0.24 layers/patch_embed.py (lines 26-142) for the
-thirdparty.timm minimal closure; set_input_size (depends on resample_patch_embed)
-removed, nchw_to output-format path removed, torch.jit.Final annotations and
-device/dtype plumbing removed.
-
-Manual post-paconvert rewrite: paddle.compat.nn.functional.pad ->
-paddle.nn.functional.pad (paddle's pad list is ordered from the last
-dimension backwards, matching torch, so the tuple is used unchanged).
+# Adapted from https://github.com/huggingface/pytorch-image-models (timm 1.0.24).
 """
+
 import math
 from typing import Callable, Optional, Tuple, Union
 

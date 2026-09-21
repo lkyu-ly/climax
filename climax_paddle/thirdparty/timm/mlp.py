@@ -1,15 +1,12 @@
-""" MLP module w/ dropout and configurable activation layer
+"""MLP module w/ dropout and configurable activation layer
 
 Hacked together by / Copyright 2020 Ross Wightman
+# Adapted from https://github.com/huggingface/pytorch-image-models (timm 1.0.24).
 
-Extracted from timm 1.0.24 layers/mlp.py (lines 14-54) for the
-thirdparty.timm minimal closure; `from .grn import GlobalResponseNorm`
-dropped and the device/dtype plumbing removed.
-
-Manual post-paconvert rewrite: paddle.compat.nn.Linear -> paddle.nn.Linear
-(native [in, out] weight layout; torch Linear weights must be transposed
-when transferred).
+Linear is native paddle.nn.Linear ([in, out] weight layout; torch Linear
+weights must be transposed when transferred).
 """
+
 from functools import partial
 from typing import Optional, Tuple, Type, Union
 

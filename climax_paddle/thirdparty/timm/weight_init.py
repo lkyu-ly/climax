@@ -1,14 +1,13 @@
-""" Weight initialization
+"""Weight initialization
 
-Extracted from timm 1.0.24 layers/weight_init.py (lines 19-78) for the
-thirdparty.timm minimal closure. Keeps the a=-2, b=2 default truncation path.
+Hacked together by / Copyright 2020 Ross Wightman
+# Adapted from https://github.com/huggingface/pytorch-image-models (timm 1.0.24).
 
-Manual post-paconvert rewrite: the torch in-place chain
-(uniform_ / erfinv_ / mul_ / add_ / clamp_) is replaced by a functional
-paddle implementation (paddle.uniform + paddle.erfinv) with the result
-written back into the original parameter, preserving in-place semantics
-and the [-2*std, 2*std] truncation behaviour and boundaries.
+trunc_normal_ is a functional paddle implementation (paddle.uniform +
+paddle.erfinv) that writes the result back into the original parameter,
+preserving in-place semantics and the [-2*std, 2*std] truncation.
 """
+
 import math
 import warnings
 

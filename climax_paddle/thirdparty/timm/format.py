@@ -1,8 +1,9 @@
-""" Tensor format enum
+"""Tensor format enum
 
-Extracted from timm 1.0.24 layers/format.py (lines 6-14) for the
-thirdparty.timm minimal closure.
+Hacked together by / Copyright 2020 Ross Wightman
+# Adapted from https://github.com/huggingface/pytorch-image-models (timm 1.0.24).
 """
+
 from enum import Enum
 from typing import Union
 

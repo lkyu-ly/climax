@@ -178,9 +178,8 @@ def main():
     # are shared, so the later-built optimizer stays valid) and BEFORE the
     # module is constructed (module.net then refers to the wrapped object).
     if os.environ.get("CLIMAX_USE_CINN", "0") == "1":
-        full_graph = os.environ.get("CLIMAX_FULL_GRAPH", "1") == "1"
-        net = paddle.jit.to_static(net, full_graph=full_graph)
-        print(f"[CINN] to_static enabled, full_graph={full_graph}")
+        net = paddle.jit.to_static(net, full_graph=True)
+        print("[CINN] to_static enabled, full_graph=True")
     module = ClimateProjectionModule(
         net=net,
         pretrained_path="" if init_state_path else cfg.model.get("pretrained_path", ""),
@@ -222,11 +221,8 @@ def main():
 
     for epoch in range(max_epochs):
         module.net.train()
-        # Per-step timing, identical instrumentation in dynamic and CINN
-        # modes: perf_counter wraps training_step + backward + optimizer
-        # step/clear_grad + lr_scheduler.step (batch fetching excluded).
-        # training_step itself syncs (float() on the logged losses), so the
-        # measured wall time includes actual device execution.
+        # Per-step timing (identical in dynamic and CINN modes): wall clock
+        # around train step + backward + optimizer/scheduler update.
         step_times = []
         epoch_train_start = time.perf_counter()
         for i, batch in enumerate(_iter_limited(train_loader, limit_batches)):
@@ -240,14 +236,10 @@ def main():
             if (i + 1) % 50 == 0:
                 cum = sum(step_times)
                 print(
-                    f"[timing] epoch={epoch} step={i + 1} "
-                    f"cum={cum:.2f}s avg={cum / len(step_times):.4f}s"
-                )
-                print(
                     f"Epoch {epoch} step {i + 1}: train/loss = {float(loss):.4f}"
+                    f" | cum={cum:.2f}s avg={cum / len(step_times):.4f}s"
                 )
-        # pure-training wall clock for this epoch (data loading gaps included
-        # only where they overlap compute; validation excluded entirely)
+        # pure-training wall clock for this epoch (validation excluded)
         train_wall = time.perf_counter() - epoch_train_start
         steady = step_times[50:]  # skip warmup steps for the steady median
         steady_median = (

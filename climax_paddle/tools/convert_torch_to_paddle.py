@@ -25,8 +25,8 @@ Transpose rules (measured on this environment, paddle 3.4):
 
 The script self-checks: key-set diff vs a freshly built paddle model must be
 empty and every post-conversion shape must match the paddle state_dict, then
-it round-trips through ClimateProjectionModule.load_mae_weights (the Task 8/9
-load path) and additionally runs a strict full set_state_dict.
+it round-trips through ClimateProjectionModule.load_mae_weights and
+additionally runs a strict full set_state_dict.
 
 Usage (works from any cwd; pure CPU):
     python convert_torch_to_paddle.py [--input PATH] [--config PATH] [--out PATH] [--skip-verify]
@@ -173,7 +173,7 @@ def main():
     if args.skip_verify:
         return
 
-    # ---- Step 4: round-trip through the Task 8/9 load path ----
+    # ---- round-trip verification through the training load path ----
     # module construction runs load_mae_weights, which prints its
     # (missing_keys, unexpected_keys) message; missing must be exactly the
     # re-initialized token_embeds/head keys. The programmatic check below is
