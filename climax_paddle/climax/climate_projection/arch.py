@@ -73,10 +73,14 @@ class ClimaXClimateBench(ClimaX):
         if self.parallel_patch_embed:
             x = self.token_embeds(x, var_ids)
         else:
-            for i in range(len(var_ids)):
-                id = var_ids[i]
-                # paddle LayerList indexing needs a Python int (var_ids[i] is a 0-dim tensor)
-                embeds.append(self.token_embeds[int(id)](x[:, i : i + 1]))
+            # var_ids values are pure Python constants (var_map dict lookup);
+            # recompute them as ints so the to_static tracer can index the
+            # ModuleList without a tensor->int conversion, which dy2static
+            # cannot resolve (KeyError: pir Value as _sub_layers key).
+            # Numerically equivalent: same values, same loop order.
+            id_list = [int(self.var_map[var]) for var in variables]
+            for i in range(len(id_list)):
+                embeds.append(self.token_embeds[id_list[i]](x[:, i : i + 1]))
             x = paddle.stack(embeds, dim=1)
         var_embed = self.get_var_emb(self.var_embed, variables)
         x = x + var_embed.unsqueeze(2)

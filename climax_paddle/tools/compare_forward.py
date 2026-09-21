@@ -215,6 +215,17 @@ def trace_paddle(net, x, lead_times, variables):
 
 
 def cmd_paddle(args):
+    # CINN switch (same contract as train.py): must run before `import paddle`.
+    if os.environ.get("CLIMAX_USE_CINN", "0") == "1":
+        os.environ["FLAGS_prim_enable_dynamic"] = "true"
+        os.environ["FLAGS_prim_all"] = "true"
+        os.environ["FLAGS_use_cinn"] = "true"
+        os.environ.setdefault("FLAGS_print_ir", "false")
+    else:
+        os.environ["FLAGS_prim_enable_dynamic"] = "false"
+        os.environ["FLAGS_prim_all"] = "false"
+        os.environ["FLAGS_use_cinn"] = "false"
+
     import paddle
     from climax.climate_projection.arch import ClimaXClimateBench
 
@@ -230,6 +241,12 @@ def cmd_paddle(args):
     print("[paddle] net.set_state_dict: missing=%s unexpected=%s"
           % (sorted(missing), sorted(unexpected)))
     assert not missing and not unexpected, "strict load failed on paddle side"
+    # CINN path (same contract as train.py): wrap after the strict weight
+    # load, before any forward.
+    if os.environ.get("CLIMAX_USE_CINN", "0") == "1":
+        full_graph = os.environ.get("CLIMAX_FULL_GRAPH", "1") == "1"
+        net = paddle.jit.to_static(net, full_graph=full_graph)
+        print("[CINN] to_static enabled, full_graph=%s" % full_graph)
     net.eval()
 
     d = np.load(INPUTS_NPZ)

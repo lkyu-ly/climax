@@ -6,9 +6,24 @@ import ast
 import os
 import random
 
-import numpy as np
-import paddle
-from omegaconf import OmegaConf
+# CINN switch: a single env var gates both to_static and the CINN FLAGS
+# (paddle 3.x binds them: to_static always compiles with CINN once wrapped,
+# so separate switches would leave dead branches). Must run before any
+# `import paddle` for the FLAGS to take effect.
+_USE_CINN = os.environ.get("CLIMAX_USE_CINN", "0") == "1"
+if _USE_CINN:
+    os.environ["FLAGS_prim_enable_dynamic"] = "true"
+    os.environ["FLAGS_prim_all"] = "true"
+    os.environ["FLAGS_use_cinn"] = "true"
+    os.environ.setdefault("FLAGS_print_ir", "false")
+else:
+    os.environ["FLAGS_prim_enable_dynamic"] = "false"
+    os.environ["FLAGS_prim_all"] = "false"
+    os.environ["FLAGS_use_cinn"] = "false"
+
+import numpy as np  # noqa: E402
+import paddle  # noqa: E402
+from omegaconf import OmegaConf  # noqa: E402
 
 from climax.climate_projection.arch import ClimaXClimateBench
 from climax.climate_projection.datamodule import ClimateBenchDataModule
@@ -156,6 +171,14 @@ def main():
         )
         if missing or unexpected:
             raise RuntimeError("strict initial state load failed")
+
+    # CINN path: wrap with to_static AFTER the weights are loaded (parameters
+    # are shared, so the later-built optimizer stays valid) and BEFORE the
+    # module is constructed (module.net then refers to the wrapped object).
+    if os.environ.get("CLIMAX_USE_CINN", "0") == "1":
+        full_graph = os.environ.get("CLIMAX_FULL_GRAPH", "1") == "1"
+        net = paddle.jit.to_static(net, full_graph=full_graph)
+        print(f"[CINN] to_static enabled, full_graph={full_graph}")
     module = ClimateProjectionModule(
         net=net,
         pretrained_path="" if init_state_path else cfg.model.get("pretrained_path", ""),
