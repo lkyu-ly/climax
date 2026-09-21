@@ -1,7 +1,9 @@
 """Minimal closure of timm 1.0.24 components needed by the ClimaX backbone.
 
-Produced by paconvert from timm_paddle_torch_src/ (the kept torch-side
-extraction) followed by the manual rewrites documented in each module.
+Produced by paconvert from a torch-side extraction of timm 1.0.24 (see
+git history and docs/superpowers/plans/2026-09-20-climax-paddle-port.md
+for the extraction table), followed by the manual rewrites documented in
+each module.
 """
 from .attention import Attention
 from .block import Block

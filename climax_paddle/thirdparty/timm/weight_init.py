@@ -1,7 +1,7 @@
 """ Weight initialization
 
 Extracted from timm 1.0.24 layers/weight_init.py (lines 19-78) for the
-timm_paddle minimal closure. Keeps the a=-2, b=2 default truncation path.
+thirdparty.timm minimal closure. Keeps the a=-2, b=2 default truncation path.
 
 Manual post-paconvert rewrite: the torch in-place chain
 (uniform_ / erfinv_ / mul_ / add_ / clamp_) is replaced by a functional

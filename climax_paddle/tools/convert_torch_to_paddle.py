@@ -9,7 +9,7 @@ of paddle ClimateProjectionModule.load_mae_weights.
 
 Transpose rules (measured on this environment, paddle 3.4):
   * ``net.blocks.<i>.attn.{qkv,proj}.weight`` and ``net.blocks.<i>.mlp.{fc1,fc2}.weight``
-    — native paddle.nn.Linear inside timm_paddle Block stores weight as
+    — native paddle.nn.Linear inside thirdparty.timm Block stores weight as
     [in, out]; torch stores [out, in] -> transpose. NOTE attn.proj.weight is
     square [1024, 1024]: a missed transpose is NOT caught by shape checks,
     so the rule is driven by key names only, never by shapes.
@@ -43,7 +43,7 @@ REPO_ROOT = os.path.dirname(
 )
 PADDLE_SIDE = os.path.join(REPO_ROOT, "climax_paddle")
 if PADDLE_SIDE not in sys.path:
-    # resolve "climax"/"timm_paddle" to the paddle side even from other cwds
+    # resolve "climax"/"thirdparty.timm" to the paddle side even from other cwds
     sys.path.insert(0, PADDLE_SIDE)
 
 import numpy as np  # noqa: E402

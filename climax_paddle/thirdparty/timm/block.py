@@ -1,7 +1,7 @@
 """ Transformer Block
 
 Extracted from timm 1.0.24 models/vision_transformer.py Block (lines 126-207)
-for the timm_paddle minimal closure; _create_attn inlined as a direct
+for the thirdparty.timm minimal closure; _create_attn inlined as a direct
 Attention construction (ATTN_LAYERS/DiffAttention/LayerType dead code dropped),
 LayerScale dropped (init_values must be None -> nn.Identity), norm_layer
 default changed to nn.LayerNorm (timm custom LayerNorm chain dropped),
@@ -51,7 +51,7 @@ class Block(paddle.nn.Module):
         super().__init__()
         assert (
             init_values is None
-        ), "LayerScale is not part of the timm_paddle minimal closure"
+        ), "LayerScale is not part of the thirdparty.timm minimal closure"
         self.norm1 = norm_layer(embed_dim)
         self.attn = Attention(
             embed_dim,

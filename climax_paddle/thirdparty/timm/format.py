@@ -1,7 +1,7 @@
 """ Tensor format enum
 
 Extracted from timm 1.0.24 layers/format.py (lines 6-14) for the
-timm_paddle minimal closure.
+thirdparty.timm minimal closure.
 """
 from enum import Enum
 from typing import Union

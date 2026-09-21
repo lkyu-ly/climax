@@ -9,7 +9,7 @@ ClimaX迁移实验记录
 - 验证本地源码 research/climax 完整（HEAD 6d5d354，与调研报告记录一致，工作区干净）
 - 新仓 /home/lkyu/baidu/CLIMAX（远程 lkyu-ly/climax）：
   - commit1 88a8243：抽取扁平化 climax_torch/（climax 包 12 个 py：主干 arch/parallelpatchembed + climate_projection 链路 + utils 三个，加配置/重采样脚本/environment.yml/tests/pyproject/LICENSE），逐文件 diff 校验与源一致
-  - commit2 64c6cbf：pyproject `where=["src"]`→`["."]`、删 readme 行；.gitignore 追加 .spec-workflow/。Python 源码零修改（内部 import 全为 climax.* 绝对路径，依赖闭包 grep 验证）
+  - commit2 64c6cbf：pyproject `where=["src"]`→`["."]`、删 readme 行；.gitignore 追加 .spec-workflow/。Python 源码零修改（内部 import 全为 climax.\* 绝对路径，依赖闭包 grep 验证）
   - 不带：pretrain/global_forecast/regional_forecast、utils/data_utils.py（climate_projection 链路零引用）、snakemake_configs、其余 configs 与数据脚本、docs 等
 
 ## 2026-09-20
@@ -41,7 +41,7 @@ ClimaX迁移实验记录
 
 - 缺失安装：pytorch-lightning==1.9.5、jsonargparse[signatures]、netCDF4（torchmetrics 被连带升到 1.9.0）
 - 踩坑：环境中原有 wandb 0.25.1 在 protobuf 7.36（随 paddle 3.4 升级而来）下 import 即崩，连带 lightning logger 初始化失败；升级 wandb 0.30.0 修复（不绕过、修好为止）
-- timm 1.0.24 实测：Block/PatchEmbed/trunc_normal_ 三件套可用；timm.models.layers.helpers 已移除 → parallelpatchembed.py 改用 timm.layers.helpers（1 行）
+- timm 1.0.24 实测：Block/PatchEmbed/trunc*normal* 三件套可用；timm.models.layers.helpers 已移除 → parallelpatchembed.py 改用 timm.layers.helpers（1 行）
 
 ### torch 训练基线跑通（limit_batches=1 完整循环，问题-修复循环）
 
@@ -92,7 +92,7 @@ Restoring states from the checkpoint path at .../checkpoints/epoch_000.ckpt
 
 ### torch 正式基线短训（5 epoch 全量批次）
 
-命令（去掉全部 limit_*_batches，max_epochs=5，nohup 后台跑，全程 22 分 35 秒，RTX 4060 Ti FP32 单卡 batch_size=1）：
+命令（去掉全部 limit\_\*\_batches，max_epochs=5，nohup 后台跑，全程 22 分 35 秒，RTX 4060 Ti FP32 单卡 batch_size=1）：
 
 ```bash
 cd /home/lkyu/baidu/CLIMAX/climax_torch
@@ -130,15 +130,15 @@ test/w_nrmses_tas 0.1779
 test/w_nrmseg_tas 0.0326
 ```
 
-产物：exps/torch_baseline/{checkpoints/epoch_004.ckpt,last.ckpt, logs/version_0/events.out.tfevents.*}，日志 exps/torch_baseline_train.log。结论：正式基线短训完成，loss 与 val 指标较初始大幅收敛（val/w_mse 5 epoch 内 0.25→0.21，中期有波动），test w_rmse 0.369 K 量级，可作为 torch 侧基线锚点。
+产物：exps/torch_baseline/{checkpoints/epoch_004.ckpt,last.ckpt, logs/version_0/events.out.tfevents.\*}，日志 exps/torch_baseline_train.log。结论：正式基线短训完成，loss 与 val 指标较初始大幅收敛（val/w_mse 5 epoch 内 0.25→0.21，中期有波动），test w_rmse 0.369 K 量级，可作为 torch 侧基线锚点。
 
 ### paddle 侧移植（writing-plans + subagent-driven-development，计划：docs/superpowers/plans/2026-09-20-climax-paddle-port.md）
 
-paconvert v3.3.1 转换（commit 281e56e 为未修改基准，便于看 diff）：307 个 torch API 自动转 291 个（94.79%），16 处手动（timm 7 / Lightning 3 / torchvision Normalize 3 / _LRScheduler 1 / xarray 误报 2）。Lightning 经确认彻底舍弃（torch 侧仅作对照基线），paddle 侧普通类 + 自建训练循环。
+paconvert v3.3.1 转换（commit 281e56e 为未修改基准，便于看 diff）：307 个 torch API 自动转 291 个（94.79%），16 处手动（timm 7 / Lightning 3 / torchvision Normalize 3 / \_LRScheduler 1 / xarray 误报 2）。Lightning 经确认彻底舍弃（torch 侧仅作对照基线），paddle 侧普通类 + 自建训练循环。
 
 按任务记录（审查均通过，含 2 轮 fix）：
 
-- timm_paddle 最小闭包（timm 1.0.24 函数级抽取，244bfd1）：state_dict 键名契约逐键一致，Block 前向自检 max_abs 4.77e-07。坑：paddle 3.4 的 `Tensor.mul_/add_` 不收 Python float 标量 → trunc_normal_ 重写为 functional；本环境 paddle sdpa 数值异常（与手工分支差 ~2.4，torch sdpa 为 3.6e-07）→ fused 分支默认关闭走手工分支
+- timm*paddle 最小闭包（timm 1.0.24 函数级抽取，244bfd1）：state_dict 键名契约逐键一致，Block 前向自检 max_abs 4.77e-07。坑：paddle 3.4 的 `Tensor.mul*/add*` 不收 Python float 标量 → trunc_normal* 重写为 functional；本环境 paddle sdpa 数值异常（与手工分支差 ~2.4，torch sdpa 为 3.6e-07）→ fused 分支默认关闭走手工分支
 - 模型层接线 + utils（87e1fd7/b39caad/750647f）：参数量 torch=paddle=111,831,040；调度器 601 步逐点 abs_err=0.0；Normalize 与 torchvision 逐点 0 误差。坑：`nn.LayerList` 不接受 0-dim Tensor 索引（torch ModuleList 接受）→ `int(id)`；paddle 组字典 `learning_rate` 仅构造期读作缩放因子 → 调度器 step() 内 set_lr 受控传播；numpy 广播把 `(C,)` 对到尾维 → Normalize 按 torchvision 语义 reshape 到 dim -3
 - 数据侧（8fe1b57）：dataset/datamodule 去 Lightning/torchvision，与 torch 侧同 index 张量 max_abs_diff=0.0（数据管线逐位一致）
 - module+train 自建循环（9b52570/2c397d3）：dryrun（真实数据）EXIT=0，测试指标表与 torch 基线逐字符一致；paddle `set_state_dict` 无 strict 形参、默认宽松、返回 (missing, unexpected)
@@ -186,6 +186,3 @@ test/w_nrmseg    0.03258     0.03498     +7.3%
 总耗时 23m13s vs torch 22m35s（+2.8%，预期 30-50% 减速未出现）。epoch 级 train/loss 点值偏差 ±20~45%（初始权重同源但 shuffle 顺序与 dropout 随机流不同，属预期，简报已预判）；50 步采样 epoch 均值两侧同落 0.2~0.4 量级带、末 epoch 几乎相同（0.288 vs 0.2872）。
 
 判定：**对齐通过**——最终 test 五项相对偏差全部 <10%（最大 7.3%），曲线量级与收敛趋势一致，无需受控对齐。产物 exps/paddle_baseline/{best,last}.pdparams（各 447MB）。
-
-
-

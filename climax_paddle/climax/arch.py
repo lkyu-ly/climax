@@ -2,7 +2,7 @@ from functools import lru_cache
 
 import numpy as np
 import paddle
-from timm_paddle import Block, PatchEmbed, trunc_normal_
+from thirdparty.timm import Block, PatchEmbed, trunc_normal_
 
 from climax.utils.pos_embed import (get_1d_sincos_pos_embed_from_grid,
                                     get_2d_sincos_pos_embed)

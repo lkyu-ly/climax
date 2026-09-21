@@ -2,9 +2,9 @@
 
 Hacked together by / Copyright 2020 Ross Wightman
 
-Extracted from timm 1.0.24 layers/mlp.py (lines 14-54) for the timm_paddle
-minimal closure; `from .grn import GlobalResponseNorm` dropped and the
-device/dtype plumbing removed.
+Extracted from timm 1.0.24 layers/mlp.py (lines 14-54) for the
+thirdparty.timm minimal closure; `from .grn import GlobalResponseNorm`
+dropped and the device/dtype plumbing removed.
 
 Manual post-paconvert rewrite: paddle.compat.nn.Linear -> paddle.nn.Linear
 (native [in, out] weight layout; torch Linear weights must be transposed

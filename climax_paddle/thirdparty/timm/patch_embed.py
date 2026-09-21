@@ -9,7 +9,7 @@ Based on code in:
 Hacked together by / Copyright 2020 Ross Wightman
 
 Extracted from timm 1.0.24 layers/patch_embed.py (lines 26-142) for the
-timm_paddle minimal closure; set_input_size (depends on resample_patch_embed)
+thirdparty.timm minimal closure; set_input_size (depends on resample_patch_embed)
 removed, nchw_to output-format path removed, torch.jit.Final annotations and
 device/dtype plumbing removed.
 

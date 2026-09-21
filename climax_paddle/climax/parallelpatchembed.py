@@ -1,7 +1,7 @@
 import math
 
 import paddle
-from timm_paddle import to_2tuple
+from thirdparty.timm import to_2tuple
 
 
 def _get_conv2d_weights(in_channels, out_channels, kernel_size):
