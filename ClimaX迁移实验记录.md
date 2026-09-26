@@ -223,3 +223,21 @@ eval 前向确证真实走 CINN（日志 `add_cinn_pass.cc:334 Compiling subgrap
 
 结论：CINN 全流程（开关/前向/训练）对齐通过，加速 +5.2%（历史 to_static 模式区间 6.3%~28.1% 的下沿，如实报告）。产物：exps/{cinn_smoke,speed_dynamic,cinn_baseline}*、models 侧无新增。
 
+## 2026-09-26
+
+### PaddleScience 移植（reviewer 意见转仓；wayfinder 地图 + 16 票 + 5 波次 subagent，全程不 commit 等用户审查）
+
+调研先行：结构对照报告 + 三路深挖（solver 管线 / ClimaX 侧 / 惯例，`docs/superpowers/research/2026-09-26-*` 四份）；grilling 九项决策（Q1-Q9，地图 `.scratch/climax-ppsci-port/`）。
+
+落地（PaddleScience `feat/climax`，自 develop `d57561b1`，官方 upstream 无前进）：**34 文件 +3016 行**——`ppsci/arch/climax/` 706（ClimaX/ClimaXClimateBench 改 base.Arch dict 进出，loss/evaluate 移出，lead_times 内部 flatten [B,1]→[B]）；`ppsci/arch/paddle_timm/` 542（vendored，SPDX 署名，weight_init 换 `ppsci.utils.initializer.trunc_normal_` 复用）；`ppsci/data/dataset/climatebench_dataset.py` 334（三元组形态，seed 参数保划分可重放）；`ppsci/optimizer/lr_scheduler.py` +81（见下）；`examples/climax/` 758（main.py hydra mode=train/eval + Solver：FunctionalLoss mse/w_mse、FunctionalMetric 指标族、AdamW 双参数组直构、权重 Solver 前手动加载、CINN FLAGS+to_static 联动、validator Val 置末位使 best 监控 Val/w_mse 对齐原版）；双语文档 578 + 注册 11（mkdocs nav/api×5/index×2）。
+
+等价门（tools/compare_ppsci_ppcfd.py，08 票）：数据三分区/同源权重前向/单样本 loss 三层 vs ppcfd 版**全部 diff=0.0 逐位一致**。
+
+踩坑一例（10 票判负→16 票修复）：1 epoch 验证 epoch-0 val/w_mse=1.7675 vs 锚点 0.2601（+580%）。根因闭环：ClimaX 原版 warmup_epochs=60/max_epochs=600 配 interval="step" 是 **step 单位**（60 步升满 lr、SGDR 重启），内置 Cosine by_epoch 两态均按 epoch 解释（true：epoch-0 lr 恒 1e-8 实测；false：47580 步升满）→ 头未训练、val 停在初始权重水平。深挖报告"内置同构"结论系公式形态对比、漏时间单位换算（调研误判）。修复 F1（用户拍板）：`LinearWarmupCosineAnnealingLR` 平移入主包（paddle LRScheduler 子类化，递推逐字），**601 步逐点 abs_err=0.0**（含边界/重启点）。
+
+终验（1 epoch 全量双模式，793+89 批+test，Q2 口径"与既往无差异即等价"）：动态 val/w_mse **0.26845**（锚点 0.2601，+3.2%<10% 过门）、test/w_mse 0.12991、loss 4.41→0.71 单调降；CINN 编译 1 次 53.7s、与动态舍入级一致（793 点仅 1 点差 1e-5）、**本负载稳态无加速**（0.319 vs 0.318 s/iter，如实呈现；+5.2% 属 ppcfd 自建循环口径不进 PR 正文）。
+
+终审（15 票）修复 8 处后全绿：内部参照字样清除（utils/main/lr_scheduler docstring 改 URL 署名式）、双语文档过时口径改写（3.2.4 调度器节、CINN 节）、**"within 5.1%" 对源修正为 7.3%**（5.1% 实为 val best 偏差，test 五项最大 7.3%，PR 与 docs 统一）、pycache 残留清理、lr_scheduler 的 api 文档注册补齐。pre-commit 全钩绿（black 88/isort/ruff，仅 regrid 一文件需重排）。
+
+PR message 草稿：`/home/lkyu/baidu/test/ppsci-climax-pr.md`（三段式，待用户润色建 PR）。等价工具留 `tools/compare_ppsci_ppcfd.py`（不进上游）。
+
